@@ -1,0 +1,11 @@
+node_modules/
+frontend/dist/
+frontend/node_modules/
+backend/node_modules/
+backend/jobs_scraper/__pycache__/
+backend/jobs_scraper/.venv/
+backend/jobs_scraper/venv/
+.env
+*.pyc
+__pycache__/
+.DS_Store
