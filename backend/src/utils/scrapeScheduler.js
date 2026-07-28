@@ -9,6 +9,8 @@ const __dirname = path.dirname(__filename);
 const SCRAPE_INTERVAL_HOURS = 2;
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 let scrapeRunning = false;
+let currentChild = null;
+let userStopped = false;
 
 export async function getLastScrapeTime() {
   try {
@@ -40,7 +42,13 @@ export async function shouldScrape() {
   return elapsed >= SCRAPE_INTERVAL_HOURS;
 }
 
+export function isScrapingRunning() {
+  return scrapeRunning;
+}
+
 export function triggerScrape(keywords, locations, platforms) {
+  userStopped = false;
+  scrapeRunning = true;
   return new Promise((resolve) => {
     const scraperDir = path.join(__dirname, '..', '..', 'jobs_scraper');
     const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
@@ -49,53 +57,89 @@ export function triggerScrape(keywords, locations, platforms) {
     if (keywords?.length) args.push(`--keywords=${keywords.join(',')}`);
     if (locations?.length) args.push(`--locations=${locations.join(',')}`);
 
-    const child = spawn(pythonCmd, args, {
+    currentChild = spawn(pythonCmd, args, {
       cwd: scraperDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env },
     });
 
     let stdout = '';
-    child.stdout.on('data', (d) => {
+    currentChild.stdout.on('data', (d) => {
       const line = d.toString().trim();
       stdout += line + '\n';
       if (line) console.log(`[scraper] ${line}`);
     });
-    child.stderr.on('data', (d) => {
+    currentChild.stderr.on('data', (d) => {
       const line = d.toString().trim();
       if (line) console.error(`[scraper] ${line}`);
     });
 
+    function finish(result) {
+      scrapeRunning = false;
+      currentChild = null;
+      resolve(result);
+    }
+
     const timeout = setTimeout(() => {
-      child.kill();
-      console.warn('[scraper] Killed after timeout');
-      resolve({ success: false, timedOut: true, stdout: stdout.slice(-2000) });
+      if (currentChild) {
+        currentChild.kill('SIGKILL');
+        console.warn('[scraper] Killed after timeout');
+      }
+      finish({ success: false, timedOut: true, stdout: stdout.slice(-2000) });
     }, 1800000);
 
-    child.on('close', (code) => {
+    currentChild.on('close', (code) => {
       clearTimeout(timeout);
       if (code === 0) {
         setLastScrapeTime(new Date());
         console.log(`[scraper] Completed (exit 0)`);
-        resolve({ success: true, stdout: stdout.slice(-2000) });
+        finish({ success: true, stdout: stdout.slice(-2000) });
+      } else if (code === null) {
+        console.log('[scraper] Killed by user');
+        finish({ success: false, killed: true, stdout: stdout.slice(-2000) });
       } else {
         console.warn(`[scraper] Failed (exit ${code})`);
-        resolve({ success: false, exitCode: code, stdout: stdout.slice(-2000) });
+        finish({ success: false, exitCode: code, stdout: stdout.slice(-2000) });
       }
     });
 
-    child.on('error', (err) => {
+    currentChild.on('error', (err) => {
       clearTimeout(timeout);
       console.error(`[scraper] Error: ${err.message}`);
-      resolve({ success: false, error: err.message });
+      finish({ success: false, error: err.message });
     });
   });
+}
+
+export function stopScrape() {
+  if (currentChild) {
+    console.log('[scraper] Stopping by user request...');
+    currentChild.kill('SIGKILL');
+    currentChild = null;
+    scrapeRunning = false;
+  }
+  userStopped = true;
+  return true;
+}
+
+export function isUserStopped() {
+  return userStopped;
+}
+
+export function clearUserStopped() {
+  userStopped = false;
+}
+
+export function restartScrape(keywords, locations, platforms) {
+  stopScrape();
+  return triggerScrape(keywords, locations, platforms);
 }
 
 export let lastCheckTime = 0;
 
 export async function checkAndTriggerScrape() {
   if (scrapeRunning) return { triggered: false, reason: 'already_running' };
+  if (userStopped) return { triggered: false, reason: 'user_stopped' };
 
   const needs = await shouldScrape();
   if (!needs) return { triggered: false, reason: 'not_due' };

@@ -8,9 +8,9 @@ from typing import Any, Optional
 
 import structlog
 
-from config import DEFAULT_PLATFORMS, MAX_AGE_DAYS, SCRAPE_INTERVAL_MINUTES
+from config import DEFAULT_PLATFORMS as CFG_PLATFORMS, MAX_AGE_DAYS, SCRAPE_INTERVAL_MINUTES
 from database import close as close_db
-from database import get_meta, init_db, upsert_job, upsert_meta
+from database import get_meta, init_db, load_scraper_config, upsert_job, upsert_meta
 from dedup import Deduplicator
 from email_enricher import enrich_jobs
 from scrapers import SCRAPER_MAP
@@ -75,13 +75,29 @@ def _filter_recent(jobs: list[dict]) -> list[dict]:
     return filtered
 
 
+_db_interval_minutes: Optional[int] = None
+
+
 def run_cycle(platforms: Optional[list[str]] = None, keywords: Optional[list[str]] = None, locations: Optional[list[str]] = None) -> dict:
     from config import SEARCH_KEYWORDS, SEARCH_LOCATIONS
 
     init_db()
-    kw_list = keywords or SEARCH_KEYWORDS
-    loc_list = locations or SEARCH_LOCATIONS
-    platform_names = platforms or DEFAULT_PLATFORMS
+    db_cfg = load_scraper_config()
+    if not keywords:
+        keywords = db_cfg.get("keywords") or SEARCH_KEYWORDS
+    if not locations:
+        locations = db_cfg.get("locations") or SEARCH_LOCATIONS
+    if not platforms:
+        platforms = db_cfg.get("platforms") or CFG_PLATFORMS
+    global _db_interval_minutes, MAX_AGE_DAYS_UTC
+    db_max_days = db_cfg.get("maxAgeDays")
+    if db_max_days:
+        MAX_AGE_DAYS_UTC = timedelta(days=db_max_days)
+    _db_interval_minutes = db_cfg.get("intervalMinutes")
+
+    kw_list = keywords
+    loc_list = locations
+    platform_names = platforms
     results: dict[str, int] = {}
 
     scraped: dict[str, Any] = {}
@@ -162,8 +178,9 @@ def run_forever(platforms: Optional[list[str]] = None) -> None:
         if not _running:
             break
 
-        logger.info("sleeping", minutes=SCRAPE_INTERVAL_MINUTES)
-        for _ in range(SCRAPE_INTERVAL_MINUTES * 60):
+        sleep_minutes = _db_interval_minutes or SCRAPE_INTERVAL_MINUTES
+        logger.info("sleeping", minutes=sleep_minutes)
+        for _ in range(sleep_minutes * 60):
             if not _running:
                 break
             time.sleep(1)

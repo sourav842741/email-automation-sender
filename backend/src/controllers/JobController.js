@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/ApiResponse.js';
-import { triggerScrape, checkAndTriggerScrape, getLastScrapeTime, lastCheckTime } from '../utils/scrapeScheduler.js';
+import { triggerScrape, stopScrape, restartScrape, checkAndTriggerScrape, getLastScrapeTime, lastCheckTime, isScrapingRunning } from '../utils/scrapeScheduler.js';
 
 export const getJobs = asyncHandler(async (req, res) => {
   const { platform, keyword, location, page = 1, limit = 50 } = req.query;
@@ -158,5 +158,23 @@ export const getJobAnalytics = asyncHandler(async (req, res) => {
     emailsMissing: withoutEmail,
     lastScrapeAt: lastScrape[0]?.scraped_at?.toISOString() || null,
     dailyTrend: dailyTrend.map((d) => ({ date: d._id, count: d.count })),
+  }));
+});
+
+export const stopScrapeHandler = asyncHandler(async (req, res) => {
+  const killed = stopScrape();
+  res.status(200).json(new ApiResponse(200, killed ? 'Scrape stopped' : 'No scrape running', { killed }));
+});
+
+export const restartScrapeHandler = asyncHandler(async (req, res) => {
+  const { keywords, locations, platforms } = req.body;
+  stopScrape();
+  triggerScrape(keywords, locations, platforms);
+  res.status(202).json(new ApiResponse(202, 'Scrape restarting'));
+});
+
+export const getScrapingStatus = asyncHandler(async (req, res) => {
+  res.status(200).json(new ApiResponse(200, 'Scraping status', {
+    scraping: isScrapingRunning(),
   }));
 });

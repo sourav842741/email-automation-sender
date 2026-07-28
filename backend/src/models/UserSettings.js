@@ -45,6 +45,16 @@ const userSettingsSchema = new mongoose.Schema(
       type: String,
       default: 'Application for position',
     },
+    scraperConfig: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {
+        keywords: ['software engineer', 'frontend developer', 'backend developer'],
+        locations: ['Bangalore', 'Mumbai', 'Delhi NCR', 'Hyderabad', 'Pune', 'Remote'],
+        platforms: ['linkedin', 'indeed', 'internshala', 'glassdoor'],
+        intervalMinutes: 120,
+        maxAgeDays: 4,
+      },
+    },
   },
   { timestamps: true }
 );

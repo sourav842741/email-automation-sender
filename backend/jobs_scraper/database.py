@@ -102,6 +102,17 @@ def upsert_job(job_dict: dict) -> bool:
         raise
 
 
+def load_scraper_config() -> dict:
+    try:
+        db = get_db()
+        doc = db["usersettings"].find_one({}, {"scraperConfig": 1})
+        if doc and "scraperConfig" in doc:
+            return doc["scraperConfig"]
+    except Exception:
+        pass
+    return {}
+
+
 def get_recent_jobs(minutes: int = 30) -> list[dict]:
     col = get_jobs_collection()
     from datetime import timedelta

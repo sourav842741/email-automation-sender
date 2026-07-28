@@ -7,7 +7,7 @@ import {
   AlertCircle, WifiOff, FileText, Loader2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getJobs, getPlatforms, scrapeJobs, exportJobsCsv, getLastScrape } from '../../services/jobService.js';
+import { getJobs, getPlatforms, scrapeJobs, exportJobsCsv, getLastScrape, getScrapingStatus, stopScrape } from '../../services/jobService.js';
 import GlassCard from '../ui/GlassCard.jsx';
 
 const PLATFORM_META = {
@@ -269,7 +269,9 @@ export default function Jobs() {
   const [stats, setStats] = useState({});
   const [lastScrapeAt, setLastScrapeAt] = useState(null);
   const searchTimeout = useRef(null);
-  const scrapeCheckRef = useRef(null);
+  const pollRef = useRef(null);
+  const scrapingRef = useRef(false);
+  const fetchJobsRef = useRef(null);
 
   const fetchPlatforms = useCallback(async () => {
     try {
@@ -278,11 +280,11 @@ export default function Jobs() {
     } catch { /* platform list is non-critical */ }
   }, []);
 
-  const fetchJobs = useCallback(async () => {
-    setLoading(true);
+  const fetchJobs = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
     setError(null);
     try {
-      const params = { page, limit: 50 };
+      const params = { page, limit: 50, _t: Date.now() };
       if (platformFilter) params.platform = platformFilter;
       if (search.trim()) params.keyword = search.trim();
       const { data } = await getJobs(params);
@@ -295,19 +297,19 @@ export default function Jobs() {
         const s = {};
         jobsData.forEach((j) => { s[j.source] = (s[j.source] || 0) + 1; });
         setStats(s);
-      } else {
+      } else if (!background) {
         setError('Unexpected response from server');
       }
     } catch (err) {
-      if (err.code === 'ERR_NETWORK') {
-        setError('network');
-      } else {
-        setError(err.response?.data?.message || 'Failed to load jobs');
+      if (!background) {
+        if (err.code === 'ERR_NETWORK') setError('network');
+        else setError(err.response?.data?.message || 'Failed to load jobs');
       }
     }
-    setLoading(false);
+    if (!background) setLoading(false);
   }, [page, platformFilter, search]);
 
+  useEffect(() => { fetchJobsRef.current = fetchJobs; }, [fetchJobs]);
   useEffect(() => { fetchPlatforms(); }, [fetchPlatforms]);
   useEffect(() => { fetchJobs(); }, [fetchJobs]);
 
@@ -318,44 +320,44 @@ export default function Jobs() {
     return () => clearTimeout(searchTimeout.current);
   }, [search]);
 
+  useEffect(() => {
+    const tick = async () => {
+      const status = await getScrapingStatus().catch(() => ({ data: { data: { scraping: false } } }));
+      const isRunning = status?.data?.data?.scraping;
+      if (isRunning && !scrapingRef.current) {
+        scrapingRef.current = true;
+        setScraping(true);
+        setScrapeMsg('Scraping in progress...');
+      } else if (!isRunning && scrapingRef.current) {
+        scrapingRef.current = false;
+        setScraping(false);
+        setScrapeMsg('Scrape complete!');
+        fetchJobsRef.current?.(true);
+        setTimeout(() => setScrapeMsg(''), 5000);
+        return;
+      }
+      if (isRunning) fetchJobsRef.current?.(true);
+    };
+    tick();
+    pollRef.current = setInterval(tick, 10000);
+    return () => clearInterval(pollRef.current);
+  }, []);
+
   const handleScrape = async () => {
-    setScraping(true);
-    setScrapeMsg('Scraping in background...');
-    toast.success('Scraping started! Results will appear shortly.');
     try {
-      const keyword = search.trim() || 'software engineer';
-      await scrapeJobs({
-        keywords: [keyword],
-        locations: ['Bangalore', 'Mumbai', 'Delhi NCR', 'Hyderabad', 'Pune', 'Remote'],
-        platforms: DEFAULT_PLATFORMS,
-      });
-      // Auto-refresh every 10s until scrape completes
-      let attempts = 0;
-      const check = () => {
-        scrapeCheckRef.current = setTimeout(async () => {
-          attempts++;
-          try {
-            const ls = await getLastScrape();
-            if (ls.data?.data?.lastScrapeAt) {
-              setLastScrapeAt(ls.data.data.lastScrapeAt);
-              setScrapeMsg('Latest jobs fetched!');
-              toast.success('New jobs loaded!');
-              fetchJobs();
-              setScraping(false);
-              setTimeout(() => setScrapeMsg(''), 5000);
-              return;
-            }
-          } catch { /* still running */ }
-          if (attempts < 30) check(); else { setScraping(false); setScrapeMsg(''); }
-        }, 10000);
-      };
-      check();
-    } catch {
-      setScrapeMsg('Scrape failed');
-      toast.error('Scrape failed');
+      await scrapeJobs({});
+    } catch { /* ignore */ }
+  };
+
+  const handleStopScrape = async () => {
+    try {
+      await stopScrape();
       setScraping(false);
-      setTimeout(() => setScrapeMsg(''), 5000);
-    }
+      scrapingRef.current = false;
+      setScrapeMsg('Scrape stopped');
+      setTimeout(() => setScrapeMsg(''), 3000);
+      toast.success('Scraping stopped');
+    } catch { toast.error('Failed to stop'); }
   };
 
   const handleDownloadCsv = async () => {
@@ -416,10 +418,17 @@ export default function Jobs() {
               <Download className={`h-4 w-4 ${downloadLoading ? 'animate-pulse' : ''}`} />
               <span className="hidden sm:inline ml-1.5">CSV</span>
             </button>
-            <button onClick={handleScrape} disabled={scraping} className="btn-primary !px-4 !py-2.5 text-xs font-bold rounded-xl shadow-lg shadow-primary-200 dark:shadow-primary-900/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-              <Sparkles className={`h-4 w-4 ${scraping ? 'animate-spin' : ''}`} />
-              {scraping ? 'Scraping...' : 'Scrape Now'}
-            </button>
+            {scraping ? (
+              <button onClick={handleStopScrape} className="btn-danger !px-4 !py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-red-200 dark:shadow-red-900/30">
+                <X className="h-4 w-4" />
+                Stop
+              </button>
+            ) : (
+              <button onClick={handleScrape} className="btn-primary !px-4 !py-2.5 text-xs font-bold rounded-xl shadow-lg shadow-primary-200 dark:shadow-primary-900/30 flex items-center gap-2">
+                <Sparkles className="h-4 w-4" />
+                Scrape Now
+              </button>
+            )}
             <button onClick={() => { setPage(1); fetchJobs(); }} className="btn-ghost !px-3 !py-2.5 text-xs font-semibold rounded-xl">
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>

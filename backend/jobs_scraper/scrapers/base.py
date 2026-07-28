@@ -75,6 +75,8 @@ class BaseScraper(ABC):
         ...
 
     def scrape_all(self, keywords: list[str], locations: list[str]) -> list[dict[str, Any]]:
+        from database import init_db, upsert_job
+        init_db()
         all_jobs: list[dict[str, Any]] = []
         for kw in keywords:
             for loc in locations:
@@ -83,6 +85,12 @@ class BaseScraper(ABC):
                     for j in jobs:
                         j["search_term"] = f"{kw} - {loc}"
                     all_jobs.extend(jobs)
+                    # Insert immediately so frontend sees jobs in real-time
+                    for j in jobs:
+                        try:
+                            upsert_job(j)
+                        except Exception:
+                            pass
                     logger.info("keyword_done", platform=self.platform, keyword=kw, location=loc, count=len(jobs))
                 except Exception as e:
                     logger.error("keyword_failed", platform=self.platform, keyword=kw, location=loc, error=str(e))

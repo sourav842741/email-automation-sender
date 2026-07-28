@@ -35,6 +35,8 @@ class LinkedInScraper(BaseScraper):
         return browser
 
     def scrape_all(self, keywords: list[str], locations: list[str]) -> list[dict[str, Any]]:
+        from database import init_db, upsert_job
+        init_db()
         browser = self._get_browser()
         if not browser:
             return []
@@ -45,6 +47,12 @@ class LinkedInScraper(BaseScraper):
                 for location in locations:
                     jobs = self.scrape_keyword(keyword, location)
                     all_jobs.extend(jobs)
+                    for j in jobs:
+                        try:
+                            upsert_job(j)
+                        except Exception:
+                            pass
+                    logger.info("keyword_done", platform=self.platform, keyword=keyword, location=location, count=len(jobs))
         finally:
             self.close()
         return all_jobs

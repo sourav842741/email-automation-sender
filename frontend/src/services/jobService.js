@@ -11,3 +11,9 @@ export const exportJobsCsv = (params = {}) => api.get('/jobs/export', { params, 
 export const getLastScrape = () => api.get('/jobs/last-scrape');
 
 export const getJobAnalytics = () => api.get('/jobs/analytics');
+
+export const getScrapingStatus = () => api.get('/jobs/scraping-status');
+
+export const stopScrape = () => api.post('/jobs/stop');
+
+export const restartScrape = (data = {}) => api.post('/jobs/restart', data);
