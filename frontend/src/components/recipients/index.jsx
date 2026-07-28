@@ -6,7 +6,6 @@ import { useNavigate } from 'react-router-dom';
 import { parseRecipients } from '../../utils/validation.js';
 import Button from '../ui/Button.jsx';
 import GlassCard from '../ui/GlassCard.jsx';
-import TextArea from '../ui/TextArea.jsx';
 import Badge from '../ui/Badge.jsx';
 
 export default function Recipients() {
@@ -48,8 +47,9 @@ export default function Recipients() {
               </div>
             )}
           </div>
-          <TextArea
+          <textarea
             rows={8}
+            className="input resize-none"
             placeholder="Paste email addresses here (one per line, comma or semicolon separated)"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -84,10 +84,10 @@ export default function Recipients() {
         <GlassCard>
           <h3 className="font-bold text-gray-900 dark:text-white mb-4">Invalid Entries ({parsed.counts.invalid})</h3>
           <div className="space-y-2">
-            {parsed.invalid.map((entry, i) => (
+                {parsed.invalid.map((entry, i) => (
               <div key={i} className="flex items-center gap-3 rounded-2xl p-3 bg-red-50/50 dark:bg-red-900/10 border border-red-100 dark:border-red-800/30">
                 <XCircle className="h-4 w-4 text-red-500 shrink-0" />
-                <span className="text-sm text-gray-700 dark:text-gray-300">{entry}</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">{entry.raw || entry.email || entry}</span>
               </div>
             ))}
           </div>
