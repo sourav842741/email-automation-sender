@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   Save, Server, Mail, User, Shield, Search, MapPin, Globe, Clock, Calendar,
   AtSign, EyeOff, CheckCircle, XCircle, Smartphone, Linkedin, FileText,
-  GraduationCap, Briefcase, ChevronDown, Loader2,
+  GraduationCap, Briefcase, ChevronDown, Loader2, Sparkles,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useApp } from '../../context/AppContext.jsx';
@@ -93,6 +93,7 @@ export default function Settings() {
   const [scraperPlatforms, setScraperPlatforms] = useState([]);
   const [scraperInterval, setScraperInterval] = useState(120);
   const [scraperMaxAge, setScraperMaxAge] = useState(4);
+  const [fresherMode, setFresherMode] = useState(false);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
     defaultValues: {
@@ -112,6 +113,7 @@ export default function Settings() {
       setScraperPlatforms(sc.platforms || ['linkedin', 'indeed', 'internshala', 'glassdoor']);
       setScraperInterval(sc.intervalMinutes ?? 120);
       setScraperMaxAge(sc.maxAgeDays ?? 4);
+      setFresherMode(sc.fresherMode ?? false);
     }
   }, [settings, setValue]);
 
@@ -123,14 +125,19 @@ export default function Settings() {
       platforms: scraperPlatforms,
       intervalMinutes: scraperInterval,
       maxAgeDays: scraperMaxAge,
+      fresherMode,
     },
-  }), [scraperKw, scraperLoc, scraperPlatforms, scraperInterval, scraperMaxAge]);
+  }), [scraperKw, scraperLoc, scraperPlatforms, scraperInterval, scraperMaxAge, fresherMode]);
 
   const autoSave = useCallback((data) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      try { await updateSettings(buildPayload(data), true); }
-      catch { toast.error('Auto-save failed'); }
+      try {
+        const payload = buildPayload(data);
+        if (!payload.myName) delete payload.myName;
+        if (!payload.email) delete payload.email;
+        await updateSettings(payload, true);
+      } catch { toast.error('Auto-save failed'); }
     }, 3000);
   }, [updateSettings, buildPayload]);
 
@@ -138,7 +145,7 @@ export default function Settings() {
   useEffect(() => {
     if (Object.keys(settings).length > 0) autoSave(watchedValues);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [watchedValues, autoSave, settings, scraperKw, scraperLoc, scraperPlatforms, scraperInterval, scraperMaxAge]);
+  }, [watchedValues, autoSave, settings, scraperKw, scraperLoc, scraperPlatforms, scraperInterval, scraperMaxAge, fresherMode]);
 
   const onSubmit = async (data) => {
     setSaving(true);
@@ -267,6 +274,19 @@ export default function Settings() {
               );
             })}
           </div>
+        </div>
+
+        <div className="flex items-center justify-between p-4 mt-5 bg-gradient-to-r from-primary-50/60 to-transparent dark:from-primary-900/10 dark:to-transparent border border-primary-200/40 dark:border-primary-700/30 rounded-2xl">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 shrink-0">
+              <Sparkles className="h-5 w-5" strokeWidth={1.5} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Fresher Mode</p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Prioritise jobs with 0–1 years experience — adds "fresher" / "entry level" to every keyword</p>
+            </div>
+          </div>
+          <ToggleSwitch checked={fresherMode} onChange={() => setFresherMode(!fresherMode)} />
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2 mt-5">

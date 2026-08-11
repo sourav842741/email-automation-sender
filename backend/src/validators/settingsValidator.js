@@ -1,8 +1,8 @@
 import { body } from 'express-validator';
 
 const settingsValidator = [
-  body('myName').notEmpty().withMessage('Name is required').trim(),
-  body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
+  body('myName').optional({ values: 'falsy' }).trim(),
+  body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required').normalizeEmail(),
   body('smtpHost').optional().trim(),
   body('smtpPort').optional().isInt({ min: 1, max: 65535 }).withMessage('SMTP port must be between 1 and 65535'),
   body('smtpSecure').optional().isBoolean().withMessage('SMTP secure must be boolean'),

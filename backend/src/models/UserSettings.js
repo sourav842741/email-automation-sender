@@ -53,6 +53,7 @@ const userSettingsSchema = new mongoose.Schema(
         platforms: ['linkedin', 'indeed', 'internshala', 'glassdoor'],
         intervalMinutes: 120,
         maxAgeDays: 4,
+        fresherMode: false,
       },
     },
   },

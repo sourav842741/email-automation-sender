@@ -95,7 +95,11 @@ def run_cycle(platforms: Optional[list[str]] = None, keywords: Optional[list[str
         MAX_AGE_DAYS_UTC = timedelta(days=db_max_days)
     _db_interval_minutes = db_cfg.get("intervalMinutes")
 
+    fresher_mode = db_cfg.get("fresherMode", False)
     kw_list = keywords
+    if fresher_mode:
+        kw_list = [f"fresher {kw}" for kw in keywords]
+        logger.info("fresher_mode_active", original_keywords=keywords, modified_keywords=kw_list)
     loc_list = locations
     platform_names = platforms
     results: dict[str, int] = {}

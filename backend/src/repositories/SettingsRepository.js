@@ -25,7 +25,11 @@ class SettingsRepository extends BaseRepository {
     try {
       let settings = await this.findOne({});
       if (settings) {
-        settings = await this.updateOne({ _id: settings._id }, data);
+        settings = await this.model.findOneAndUpdate(
+          { _id: settings._id },
+          { $set: data },
+          { new: true }
+        );
       } else {
         settings = await this.create(data);
       }
