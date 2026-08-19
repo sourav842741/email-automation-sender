@@ -1,3 +1,4 @@
+import fs from 'fs';
 import nodemailer from 'nodemailer';
 import SettingsRepository from '../repositories/SettingsRepository.js';
 import ResumeRepository from '../repositories/ResumeRepository.js';
@@ -73,6 +74,8 @@ class EmailService {
         },
       });
 
+      console.log(`[email] Sending ${recipients.length} emails via ${settings.smtpHost}:${settings.smtpPort || 587} as ${settings.smtpUser}`);
+
       const myName = settings.myName || '';
       const fallbackGreeting = settings.fallbackGreeting || 'Dear Hiring Team';
       const subjectTemplate = customSubject || settings.defaultSubject || 'Application';
@@ -119,29 +122,36 @@ class EmailService {
 
         const attachments = [];
 
-        if (resume && resume.path) {
+        if (resume && resume.path && fs.existsSync(resume.path)) {
           attachments.push({
             filename: resume.originalName,
             path: resume.path,
           });
+        } else if (resume && resume.path) {
+          console.warn(`[email] Resume file not found: ${resume.path} — skipping attachment`);
         }
 
         if (
           coverLetter &&
           coverLetter.type === 'file' &&
-          coverLetter.uploadedFile?.path
+          coverLetter.uploadedFile?.path &&
+          fs.existsSync(coverLetter.uploadedFile.path)
         ) {
           attachments.push({
             filename: coverLetter.uploadedFile.originalName,
             path: coverLetter.uploadedFile.path,
           });
+        } else if (coverLetter && coverLetter.type === 'file' && coverLetter.uploadedFile?.path) {
+          console.warn(`[email] Cover letter file not found: ${coverLetter.uploadedFile.path} — skipping attachment`);
         }
 
         const mailOptions = {
-          from: `"${settings.senderName || myName}" <${settings.email}>`,
+          from: `"${settings.senderName || myName}" <${settings.smtpUser}>`,
+          replyTo: settings.email || settings.smtpUser,
           to: recipient.email,
           subject,
           text: body,
+          html: body,
         };
 
         if (attachments.length > 0) {
@@ -149,7 +159,8 @@ class EmailService {
         }
 
         try {
-          await transporter.sendMail(mailOptions);
+          const info = await transporter.sendMail(mailOptions);
+          console.log(`[email] Sent to ${recipient.email} | messageId: ${info.messageId} | response: ${info.response}`);
           summary.success++;
 
           await historyRepo.create({
@@ -162,6 +173,7 @@ class EmailService {
 
           onProgress(i + 1, recipients.length, 'success', { name: recipient.email, email: recipient.email });
         } catch (sendError) {
+          console.error(`[email] FAILED to ${recipient.email} | error: ${sendError.message}`);
           summary.failed++;
           summary.errors.push({
             email: recipient.email,
@@ -178,7 +190,7 @@ class EmailService {
           });
 
           onProgress(i + 1, recipients.length, 'failed', {
-            name,
+            name: recipient.email,
             email: recipient.email,
             error: sendError.message,
           });
@@ -192,6 +204,7 @@ class EmailService {
       throw new Error(`EmailService.sendEmails: ${error.message}`);
     }
 
+    console.log(`[email] Send complete | total: ${summary.total} | success: ${summary.success} | failed: ${summary.failed}`);
     return summary;
   }
 

@@ -10,7 +10,11 @@ import { extractEmailsFromFile } from '../helpers/csvParser.js';
 export const sendEmails = asyncHandler(async (req, res) => {
   const { recipients, jobTitle, company, subject, delay } = req.body;
 
+  console.log(`[controller] sendEmails called | recipients type: ${typeof recipients} | subject: ${subject}`);
+
   const parsed = parseRecipients(recipients);
+
+  console.log(`[controller] Parsed: ${parsed.counts.valid} valid, ${parsed.counts.invalid} invalid | emails: ${parsed.valid.map(r => r.email).join(', ')}`);
 
   if (parsed.counts.valid === 0) {
     throw new ApiError('No valid recipients', 400);

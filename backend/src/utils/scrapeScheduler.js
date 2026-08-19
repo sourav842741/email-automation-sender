@@ -60,7 +60,7 @@ export function triggerScrape(keywords, locations, platforms) {
     currentChild = spawn(pythonCmd, args, {
       cwd: scraperDir,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: { ...process.env, PYTHONUTF8: '1' },
     });
 
     let stdout = '';
